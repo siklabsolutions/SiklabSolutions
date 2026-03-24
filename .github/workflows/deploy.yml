@@ -9,7 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -17,8 +16,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install frontend dependencies
         working-directory: siklab-react
@@ -30,51 +29,35 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: [self-hosted, windows]
+    runs-on: self-hosted
     steps:
-
       - name: Deploy to Hostinger
         shell: pwsh
         env:
-          HOST: ${{ secrets.HOSTINGER_HOST || '195.35.62.124' }}
-          HOST_USER: ${{ secrets.HOSTINGER_USERNAME || 'u160668427' }}
-          DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH || '/home/u160668427/public_html/siklab' }}
-          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY || secrets.HOSTINGER_PRIVATE_KEY || vars.HOSTINGER_SSH_KEY || vars.HOSTINGER_PRIVATE_KEY }}
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+          HOSTINGER_USERNAME: ${{ secrets.HOSTINGER_USERNAME }}
+          DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH }}
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          HOSTINGER_PRIVATE_KEY: ${{ secrets.HOSTINGER_PRIVATE_KEY }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference = "Stop"
 
-          if ([string]::IsNullOrWhiteSpace($env:SSH_PRIVATE_KEY)) {
-            throw "Missing HOSTINGER_SSH_KEY secret"
-          }
+          $hostName = $env:HOSTINGER_HOST
+          if ([string]::IsNullOrWhiteSpace($hostName)) { $hostName = "195.35.62.124" }
+
+          $hostUser = $env:HOSTINGER_USERNAME
+          if ([string]::IsNullOrWhiteSpace($hostUser)) { $hostUser = "u160668427" }
+
+          $deployPath = $env:DEPLOYMENT_PATH
+          if ([string]::IsNullOrWhiteSpace($deployPath)) { $deployPath = "/home/u160668427/public_html/siklab" }
+
+          $privateKey = $env:HOSTINGER_SSH_KEY
+          if ([string]::IsNullOrWhiteSpace($privateKey)) { $privateKey = $env:HOSTINGER_PRIVATE_KEY }
+          if ([string]::IsNullOrWhiteSpace($privateKey)) { throw "Missing HOSTINGER_SSH_KEY / HOSTINGER_PRIVATE_KEY secret" }
 
           $keyPath = Join-Path $env:RUNNER_TEMP "hostinger_deploy_key"
-          [System.IO.File]::WriteAllText($keyPath, $env:SSH_PRIVATE_KEY)
+          [System.IO.File]::WriteAllText($keyPath, $privateKey)
 
-          $remoteScript = @"
-set -e
-export PATH=\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH
+          $remoteScript = "set -e; export PATH=\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH; cd '$deployPath'; git pull origin main; command -v npm >/dev/null 2>&1 || { echo 'npm is not available in PATH'; exit 1; }; cd siklab-react; npm install; npm run build; cp -r dist/* \$HOME/public_html/; echo 'Deployment completed at \$(date)' >> ../deployment.log"
 
-cd '$env:DEPLOYMENT_PATH'
-git pull origin main
-
-command -v npm >/dev/null 2>&1 || { echo "npm is not available in PATH"; exit 1; }
-
-cd siklab-react
-npm install
-npm run build
-
-cp -r dist/* \$HOME/public_html/
-echo "Deployment completed at \$(date)" >> ../deployment.log
-"@
-
-          ssh -o StrictHostKeyChecking=accept-new -i "$keyPath" -p 65002 "$($env:HOST_USER)@$($env:HOST)" $remoteScript
-
-      - name: Deployment Status Notification
-        if: always()
-        shell: pwsh
-        run: |
-          if ("${{ job.status }}" -eq "success") {
-            Write-Output "Deployment to Hostinger completed successfully!"
-          } else {
-            Write-Output "Deployment failed!"
-          }
+          ssh -o StrictHostKeyChecking=accept-new -i "$keyPath" -p 65002 "$hostUser@$hostName" $remoteScript
