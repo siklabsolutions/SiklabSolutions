@@ -68,7 +68,7 @@ jobs:
             throw "SSH key format looks invalid. Re-save HOSTINGER_SSH_KEY as the full private key including BEGIN/END lines."
           }
 
-          $keyPath = Join-Path $env:RUNNER_TEMP "hostinger_deploy_key"
+          $keyPath = Join-Path $env:RUNNER_TEMP ("hostinger_deploy_key_" + [System.Guid]::NewGuid().ToString("N"))
           [System.IO.File]::WriteAllText($keyPath, $privateKey + "`n")
 
           # Restrict key file ACL so OpenSSH accepts the private key on Windows.
@@ -79,4 +79,11 @@ jobs:
 
           $remoteScript = "set -e; export PATH=\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH; cd '$deployPath'; git pull origin main; command -v npm >/dev/null 2>&1 || { echo 'npm is not available in PATH'; exit 1; }; cd siklab-react; npm install; npm run build; cp -r dist/* \$HOME/public_html/; echo 'Deployment completed at \$(date)' >> ../deployment.log"
 
-          ssh -o StrictHostKeyChecking=accept-new -i "$keyPath" -p 65002 "$hostUser@$hostName" $remoteScript
+          try {
+            ssh -o StrictHostKeyChecking=accept-new -i "$keyPath" -p 65002 "$hostUser@$hostName" $remoteScript
+          }
+          finally {
+            if (Test-Path $keyPath) {
+              Remove-Item -Path $keyPath -Force -ErrorAction SilentlyContinue
+            }
+          }
