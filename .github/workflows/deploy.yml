@@ -78,19 +78,19 @@ jobs:
           icacls $keyPath /grant:r "$currentUser`:(R)" "SYSTEM`:(R)" | Out-Null
 
           $escapedDeployPath = $deployPath.Replace("'", "'\"'\"'")
-          $remoteScript = @'
-set -e
-export PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH
-cd '__DEPLOY_PATH__'
-git pull origin main
-command -v npm >/dev/null 2>&1 || { echo 'npm is not available in PATH'; exit 1; }
-cd siklab-react
-npm install
-npm run build
-cp -r dist/* $HOME/public_html/
-echo "Deployment completed at $(date)" >> ../deployment.log
-'@
-          $remoteScript = $remoteScript.Replace("__DEPLOY_PATH__", $escapedDeployPath)
+          $remoteLines = @(
+            'set -e'
+            'export PATH=$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH'
+            "cd '$escapedDeployPath'"
+            'git pull origin main'
+            "command -v npm >/dev/null 2>&1 || { echo 'npm is not available in PATH'; exit 1; }"
+            'cd siklab-react'
+            'npm install'
+            'npm run build'
+            'cp -r dist/* $HOME/public_html/'
+            'echo "Deployment completed at $(date)" >> ../deployment.log'
+          )
+          $remoteScript = [string]::Join("`n", $remoteLines) + "`n"
 
           try {
             $remoteScript | ssh -o StrictHostKeyChecking=accept-new -i "$keyPath" -p 65002 "$hostUser@$hostName" "bash -s"
