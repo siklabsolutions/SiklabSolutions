@@ -75,6 +75,6 @@ echo "Deployment completed at \$(date)" >> ../deployment.log
         run: |
           if ("${{ job.status }}" -eq "success") {
             Write-Output "Deployment to Hostinger completed successfully!"
-          else
+          } else {
             Write-Output "Deployment failed!"
           }
