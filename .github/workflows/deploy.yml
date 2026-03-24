@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install root dependencies
@@ -45,11 +45,11 @@ jobs:
             git pull origin main
             
             # Install root dependencies
-            npm ci --production 2>/dev/null || true
+            npm ci 2>/dev/null || true
             
             # Build and deploy frontend
             cd siklab-react
-            npm ci --production
+            npm ci
             npm run build
             
             # Log deployment
