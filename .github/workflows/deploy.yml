@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     
     steps:
@@ -28,47 +28,45 @@ jobs:
         working-directory: siklab-react
         run: npm run build
 
-      - name: Debug key source availability
-        run: |
-          echo "HAS_HOSTINGER_SSH_KEY=${{ secrets.HOSTINGER_SSH_KEY != '' }}"
-          echo "HAS_HOSTINGER_PRIVATE_KEY=${{ secrets.HOSTINGER_PRIVATE_KEY != '' }}"
-          echo "HAS_VAR_HOSTINGER_SSH_KEY=${{ vars.HOSTINGER_SSH_KEY != '' }}"
-          echo "HAS_VAR_HOSTINGER_PRIVATE_KEY=${{ vars.HOSTINGER_PRIVATE_KEY != '' }}"
+  deploy:
+    needs: build
+    runs-on: [self-hosted, windows]
 
       - name: Deploy to Hostinger
-        shell: bash
+        shell: pwsh
         env:
           HOST: ${{ secrets.HOSTINGER_HOST || '195.35.62.124' }}
-          USERNAME: ${{ secrets.HOSTINGER_USERNAME || 'u160668427' }}
+          HOST_USER: ${{ secrets.HOSTINGER_USERNAME || 'u160668427' }}
           DEPLOYMENT_PATH: ${{ secrets.DEPLOYMENT_PATH || '/home/u160668427/public_html/siklab' }}
           SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY || secrets.HOSTINGER_PRIVATE_KEY || vars.HOSTINGER_SSH_KEY || vars.HOSTINGER_PRIVATE_KEY }}
         run: |
-          set -euo pipefail
+          $ErrorActionPreference = 'Stop'
 
-          # Validate required values (HOST/USERNAME/DEPLOYMENT_PATH have defaults above).
-          : "${SSH_PRIVATE_KEY:?Missing HOSTINGER_SSH_KEY secret}"
+          if ([string]::IsNullOrWhiteSpace($env:SSH_PRIVATE_KEY)) {
+            throw "Missing HOSTINGER_SSH_KEY secret"
+          }
 
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf "%s\n" "$SSH_PRIVATE_KEY" > ~/.ssh/hostinger_deploy_key
-          chmod 600 ~/.ssh/hostinger_deploy_key
+          $keyPath = Join-Path $env:RUNNER_TEMP "hostinger_deploy_key"
+          [System.IO.File]::WriteAllText($keyPath, $env:SSH_PRIVATE_KEY)
 
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/hostinger_deploy_key -p 65002 "$USERNAME@$HOST" '
-            set -e
-            export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+          $remoteScript = @"
+set -e
+export PATH=\$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:\$PATH
 
-            cd '"$DEPLOYMENT_PATH"'
-            git pull origin main
+cd '$env:DEPLOYMENT_PATH'
+git pull origin main
 
-            command -v npm >/dev/null 2>&1 || { echo "npm is not available in PATH"; exit 1; }
+command -v npm >/dev/null 2>&1 || { echo "npm is not available in PATH"; exit 1; }
 
-            cd siklab-react
-            npm install
-            npm run build
+cd siklab-react
+npm install
+npm run build
 
-            cp -r dist/* "$HOME/public_html/"
-            echo "Deployment completed at $(date)" >> ../deployment.log
-          '
+cp -r dist/* \$HOME/public_html/
+echo "Deployment completed at \$(date)" >> ../deployment.log
+"@
+
+          ssh -o StrictHostKeyChecking=accept-new -i "$keyPath" -p 65002 "$($env:HOST_USER)@$($env:HOST)" $remoteScript
 
       - name: Deployment Status Notification
         if: always()
