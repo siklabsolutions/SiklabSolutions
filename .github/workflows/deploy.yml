@@ -31,6 +31,7 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, windows]
+    steps:
 
       - name: Deploy to Hostinger
         shell: pwsh
@@ -70,9 +71,10 @@ echo "Deployment completed at \$(date)" >> ../deployment.log
 
       - name: Deployment Status Notification
         if: always()
+        shell: pwsh
         run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "✅ Deployment to Hostinger completed successfully!"
+          if ("${{ job.status }}" -eq "success") {
+            Write-Output "Deployment to Hostinger completed successfully!"
           else
-            echo "❌ Deployment failed!"
-          fi
+            Write-Output "Deployment failed!"
+          }
