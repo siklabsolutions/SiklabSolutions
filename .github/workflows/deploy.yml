@@ -22,7 +22,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: siklab-react
-        run: npm ci
+        run: npm install
 
       - name: Build React frontend
         working-directory: siklab-react
@@ -54,7 +54,7 @@ jobs:
             command -v npm >/dev/null 2>&1 || { echo "npm is not available in PATH"; exit 1; }
 
             cd siklab-react
-            npm ci
+            npm install
             npm run build
 
             cp -r dist/* "$HOME/public_html/"
