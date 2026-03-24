@@ -55,8 +55,21 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($privateKey)) { $privateKey = $env:HOSTINGER_PRIVATE_KEY }
           if ([string]::IsNullOrWhiteSpace($privateKey)) { throw "Missing HOSTINGER_SSH_KEY / HOSTINGER_PRIVATE_KEY secret" }
 
+          # Normalize key text from GitHub Secrets (supports pasted multiline and escaped \n variants).
+          $privateKey = $privateKey.Trim()
+          if (($privateKey.StartsWith('"') -and $privateKey.EndsWith('"')) -or ($privateKey.StartsWith("'") -and $privateKey.EndsWith("'"))) {
+            $privateKey = $privateKey.Substring(1, $privateKey.Length - 2)
+          }
+          $privateKey = $privateKey -replace "`r`n", "`n"
+          $privateKey = $privateKey -replace "`r", "`n"
+          $privateKey = $privateKey -replace "\\n", "`n"
+
+          if ($privateKey -notmatch "-----BEGIN .*PRIVATE KEY-----") {
+            throw "SSH key format looks invalid. Re-save HOSTINGER_SSH_KEY as the full private key including BEGIN/END lines."
+          }
+
           $keyPath = Join-Path $env:RUNNER_TEMP "hostinger_deploy_key"
-          [System.IO.File]::WriteAllText($keyPath, $privateKey)
+          [System.IO.File]::WriteAllText($keyPath, $privateKey + "`n")
 
           # Restrict key file ACL so OpenSSH accepts the private key on Windows.
           $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
